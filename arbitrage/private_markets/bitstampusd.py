@@ -14,6 +14,7 @@ import hashlib
 import sys
 import json
 import config
+import logging
 
 
 class PrivateBitstampUSD(Market):
@@ -23,30 +24,39 @@ class PrivateBitstampUSD(Market):
 
     def __init__(self):
         super().__init__()
-        self.username = config.bitstamp_username
-        self.password = config.bitstamp_password
+        self.key = config.bitstamp_key
+        self.secret = config.bitstamp_secret.encode("utf-8")
+        self.client_id = str(config.bitstamp_client_id)
         self.currency = "USD"
+        self.nonce = int(time.time() * 1000000)
         self.get_info()
 
     def _send_request(self, url, params={}, extra_headers=None):
         headers = {
-            'Content-type': 'application/json',
             'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'User-Agent': 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'
         }
         if extra_headers is not None:
             for k, v in extra_headers.items():
                 headers[k] = v
-
-        params['user'] = self.username
-        params['password'] = self.password
+        
+        params['key'] = self.key
+        message = str(self.nonce) + self.client_id + self.key
+        signature = hmac.new(self.secret, msg=message.encode("utf-8"), digestmod=hashlib.sha256).hexdigest().upper() 
+        params["signature"] = signature
+        params['nonce'] =  self.nonce
+        self.nonce += 1
+        #
         postdata = urllib.parse.urlencode(params).encode("utf-8")
         req = urllib.request.Request(url, postdata, headers=headers)
         response = urllib.request.urlopen(req)
         code = response.getcode()
         if code == 200:
             jsonstr = response.read().decode('utf-8')
-            return json.loads(jsonstr)
+            try:
+                return json.loads(jsonstr)
+            except Exception:
+                logging.error("%s - Can't parse json: %s" % (self.name, jsonstr))
+                raise MarketException("Can't parse json: " + jsonstr)
         return None
 
     def _buy(self, amount, price):
@@ -67,5 +77,8 @@ class PrivateBitstampUSD(Market):
         """Get balance"""
         response = self._send_request(self.balance_url)
         if response:
+            if "error" in response:
+                logging.error("%s - fetched data error: %s" % (self.name, response["error"]))
+                raise MarketException(response["error"])
             self.btc_balance = float(response["btc_available"])
             self.usd_balance = float(response["usd_available"])
