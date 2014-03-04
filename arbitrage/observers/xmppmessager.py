@@ -26,10 +26,11 @@ class MyXMPPClient(ClientXMPP):
         self.send_message(mto=config.xmpp_to, mbody=message, mtype='chat')
 
     def message(self, msg):
+        print ("GOT message: %s" % (msg.body)) 
         # TODO: Use this to control / re-config
         pass  # msg.reply("%(body)s" % msg).send()
 
-class XmppMessager(Observer):
+class XMPPMessager(Observer):
     def __init__(self):
         self.xmppclient = MyXMPPClient()
 
